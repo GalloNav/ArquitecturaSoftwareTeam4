@@ -16,7 +16,7 @@ public class PruebaModelo {
 
         // Crear dos jugadores
         Jugador j1 = new Jugador(1, "Candy", "avatar1.png", Color.ROJO);
-        Jugador j2 = new Jugador(2, "Luis", "avatar2.png", Color.AZUL);
+        Jugador j2 = new Jugador(2, "GalloNav", "avatar2.png", Color.AZUL);
 
         // Crear partida
         Partida partida = new Partida("P001");
