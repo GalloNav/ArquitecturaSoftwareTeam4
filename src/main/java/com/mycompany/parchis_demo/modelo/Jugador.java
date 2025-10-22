@@ -21,6 +21,8 @@ public class Jugador implements ObservadorPartida{
     private List<Ficha> fichas;
     private int puntos;
     private EstadoJugador estadoJugador;
+    
+    
 
     public Jugador(int id, String nombre, String avatar, Color color) {
         this.id = id;
@@ -36,6 +38,8 @@ public class Jugador implements ObservadorPartida{
             fichas.add(new Ficha(i, color));
         }
     }
+    
+    
 
     //Wakala
     public int tirarDado() {

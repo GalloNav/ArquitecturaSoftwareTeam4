@@ -36,6 +36,11 @@ public class EventoPartida {
     public EventoPartida(TipoEvento tipoEvento, Jugador jugadorAfectado, String mensaje) {
         this(tipoEvento, jugadorAfectado, null, 0, 0, 0, mensaje);
     }
+    
+    //Constructor para las pruebas
+    public EventoPartida(String mensaje) {
+    this.mensaje = mensaje;
+}
 
 
     public TipoEvento getTipoEvento() {

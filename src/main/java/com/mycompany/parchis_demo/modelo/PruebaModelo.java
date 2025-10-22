@@ -31,7 +31,7 @@ public class PruebaModelo {
 
         // Lanzar el dado
         int valorDado = j1.tirarDado();
-        System.out.println("\n" + j1.getNombre() + " tiró el dado y obtuvo: " + valorDado);
+        System.out.println("\n" + j1.getNombre() + " tiro el dado y obtuvo: " + valorDado);
 
         // Seleccionar una ficha
         Ficha ficha = j1.seleccionarFicha(0);
@@ -39,7 +39,7 @@ public class PruebaModelo {
 
         // Mover la ficha
         ficha.mover(valorDado);
-        System.out.println("Nueva posición de la ficha: " + ficha.getPosicion());
+        System.out.println("Nueva posicion de la ficha: " + ficha.getPosicion());
 
         // Actualizar puntos
         j1.actualizarPuntos(10);
@@ -50,7 +50,7 @@ public class PruebaModelo {
         if (ganador != null) {
             System.out.println("El ganador es: " + ganador.getNombre());
         } else {
-            System.out.println("La partida continúa...");
+            System.out.println("La partida continua...");
         }
 
         System.out.println("\nPrueba del modelo finalizada correctamente.");
