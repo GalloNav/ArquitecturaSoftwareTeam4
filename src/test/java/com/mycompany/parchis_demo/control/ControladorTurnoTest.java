@@ -1,5 +1,6 @@
 package com.mycompany.parchis_demo.control;
 
+import com.mycompany.parchis_demo.control.red.ProxyCliente;
 import com.mycompany.parchis_demo.modelo.*;
 import com.mycompany.parchis_demo.modelo.enums.Color;
 import com.mycompany.parchis_demo.modelo.enums.TipoEvento;
@@ -63,12 +64,17 @@ public class ControladorTurnoTest {
     @Before
     public void setUp() {
         partida = new PartidaMock();
+        ProxyCliente proxyMock = new ProxyCliente() {
+            @Override
+            public void enviarEvento(EventoPartida evento) {
+            }
+        };        
         jugador = new Jugador(1, "copesito", "Jugador1", Color.ROJO);
         ficha = new Ficha(0, Color.ROJO);
         jugador.getFichas().clear();
         jugador.getFichas().add(ficha);
         partida.getJugadores().add(jugador);
-        controlador = new ControladorTurno(partida);
+        controlador = new ControladorTurno(partida, proxyMock);
     }
 
     @Test
@@ -81,7 +87,7 @@ public class ControladorTurnoTest {
     @Test
     public void testAplicarMovimiento_CambiaPosicion() {
         ficha.setPosicion(5);
-        controlador.aplicarMovimiento(ficha, 3);
+        controlador.aplicarMovimiento(ficha, 3, jugador);
         assertEquals("La ficha debe moverse a 8", 8, ficha.getPosicion());
     }
 
