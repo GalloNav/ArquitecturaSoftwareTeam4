@@ -17,6 +17,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * Broker (servidor) que recibe mensajes JSON desde los clientes (ProxyCliente)
  * y redistribuye eventos. Gestiona registro previo (nombre + color único),
  * autodiscovery UDP, y ciclo de vida de la partida.
+ *
+ * Reglas de turno:
+ *  - El broker es la ÚNICA fuente de verdad para el cambio de turno.
+ *  - Lee flags en FICHA_MOVIDA: turnoExtra (true/false) y pierdeTurno (true/false).
+ *  - Si pierdeTurno==true  -> avanza al siguiente.
+ *  - Si turnoExtra==true    -> NO avanza (repite el mismo jugador).
+ *  - En otro caso           -> avanza al siguiente.
  */
 public class Broker {
 
@@ -24,24 +31,23 @@ public class Broker {
     private final List<ClienteInfo> clientes = new ArrayList<>();
     private final Map<Integer, PrintWriter> salidasPorId = new ConcurrentHashMap<>();
     private final Map<Integer, Jugador> jugadoresRegistrados = new ConcurrentHashMap<>();
-    private final Set<Color> coloresDisponibles = EnumSet.of(Color.ROJO, Color.AZUL, Color.VERDE, Color.AMARILLO);
+    private final Set<Color> coloresDisponibles =
+            EnumSet.of(Color.ROJO, Color.AZUL, Color.VERDE, Color.AMARILLO);
 
     private final Gson gson = new Gson();
 
     private int contadorJugadores = 0;     // ID incremental asignado al conectar
     private boolean partidaIniciada = false;
-    private int jugadorActualId = 1;       // índice "lógico" de turno (1..N)
+    private int jugadorActualId = 1;       // índice lógico de turno (1..N)
 
+    // Puertos por defecto para TCP y discovery UDP
     private final int puertoTcp = 5000;
     private final int puertoDiscovery = 5001;
 
-    /**
-     * Información básica de un cliente conectado.
-     */
+    /** Información básica de un cliente conectado. */
     private static class ClienteInfo {
         PrintWriter out;
         int jugadorId;
-
         ClienteInfo(PrintWriter out, int jugadorId) {
             this.out = out;
             this.jugadorId = jugadorId;
@@ -60,7 +66,7 @@ public class Broker {
             System.out.println("   Esperando jugadores...");
             System.out.println("___________________________________________");
 
-            // Autodescubrimiento UDP (una sola vez)
+            // Autodescubrimiento UDP (en un hilo aparte, daemon)
             Thread disc = new Thread(new DiscoveryResponder(puertoTcp, puertoDiscovery), "discovery-responder");
             disc.setDaemon(true);
             disc.start();
@@ -107,6 +113,7 @@ public class Broker {
 
     private synchronized void iniciarPartida() {
         if (partidaIniciada) return;
+
         // Asegurar que haya al menos 2 JUGADORES REGISTRADOS (no solo conectados)
         if (jugadoresRegistrados.size() < 2) {
             enviarEventoATodos(new EventoPartida(
@@ -130,6 +137,11 @@ public class Broker {
         System.out.println("[Broker] Turno inicial asignado al Jugador " + jugadorActualId);
     }
 
+    /**
+     * Dispatcher de eventos recibidos desde los clientes.
+     * Decide si se difunden a todos, si se procesa lógicamente (registro/inicio),
+     * y cómo se avanza el turno en base a flags.
+     */
     public synchronized void procesarEvento(EventoPartida evento, PrintWriter emisor) {
         if (evento == null) return;
 
@@ -166,7 +178,7 @@ public class Broker {
             coloresDisponibles.remove(req.getColor());
             jugadoresRegistrados.put(req.getId(), req);
 
-            // 1) Confirmacion directa
+            // 1) Confirmación directa al cliente
             PrintWriter outCli = salidasPorId.get(req.getId());
             if (outCli != null) {
                 outCli.println(gson.toJson(new EventoPartida(
@@ -187,21 +199,31 @@ public class Broker {
             return;
         }
 
-        // Broadcast normal 
+        // === Broadcast normal de cualquier otro evento ===
         enviarEventoATodos(evento, null);
 
-        // Cambio de turno simple tras movimiento 
+        // === Cambio de turno tras FICHA_MOVIDA (usando flags) ===
         if (evento.getTipoEvento() == TipoEvento.FICHA_MOVIDA && partidaIniciada) {
-            if (!clientes.isEmpty()) {
+            boolean repetir = evento.isTurnoExtra();
+            boolean pierde  = evento.isPierdeTurno();
+
+            if (pierde) {                 // 3 x 6 → pasa turnos (no repite)
                 jugadorActualId = (jugadorActualId % clientes.size()) + 1;
-                enviarEventoATodos(new EventoPartida(
-                        TipoEvento.TURNO_CAMBIADO, null,
-                        "Turno del jugador " + jugadorActualId), null);
-                System.out.println("[Broker] Turno cambiado -> Jugador " + jugadorActualId);
+            } else if (!repetir) {        // movimiento normal → avanza
+                jugadorActualId = (jugadorActualId % clientes.size()) + 1;
             }
+            // si repetir==true → NO avanza (repite el mismo jugador)
+
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.TURNO_CAMBIADO, null,
+                    "Turno del jugador " + jugadorActualId), null);
+            System.out.println("[Broker] Turno cambiado -> Jugador " + jugadorActualId);
         }
     }
 
+    /**
+     * Elimina un cliente desconectado de la lista y actualiza estado.
+     */
     public synchronized void eliminarCliente(PrintWriter out) {
         ClienteInfo clienteRemovido = null;
         for (ClienteInfo c : clientes) {
@@ -248,7 +270,6 @@ public class Broker {
         }
     }
 
-    
     /** Envía un evento a todos los clientes, excepto al emisor si se pasa. */
     public synchronized void enviarEventoATodos(EventoPartida evento, PrintWriter emisor) {
         String json = gson.toJson(evento);
@@ -259,7 +280,6 @@ public class Broker {
         }
     }
 
-    
     public static void main(String[] args) {
         Broker servidor = new Broker();
         servidor.iniciarServidor(5000);

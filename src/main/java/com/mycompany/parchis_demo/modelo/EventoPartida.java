@@ -11,6 +11,9 @@ public class EventoPartida {
     private int posicionAnterior; // origen (desde)
     private int posicionNueva;    // destino (hasta)
     private String mensaje;
+    private boolean turnoExtra;     // true si repite turno (saco 6 y NO es el 3ro)
+    private boolean pierdeTurno;    // true si saco 3 seises == pierde el turno
+
     private long timestamp;
 
     public EventoPartida(TipoEvento tipoEvento, Jugador jugadorAfectado, Ficha fichaAfectada,
@@ -29,7 +32,7 @@ public class EventoPartida {
         this(tipoEvento, jugadorAfectado, null, 0, 0, 0, mensaje);
     }
 
-    // --- Getters “originales” ---
+    // Getters originales 
     public TipoEvento getTipoEvento() { return tipoEvento; }
     public Jugador getJugadorAfectado() { return jugadorAfectado; }
     public Ficha getFichaAfectada() { return fichaAfectada; }
@@ -39,19 +42,55 @@ public class EventoPartida {
     public String getMensaje() { return mensaje; }
     public long getTimestamp() { return timestamp; }
 
-    // --- Setters si los necesitas (puedes omitirlos si prefieres inmutabilidad) ---
-    public void setTipoEvento(TipoEvento tipoEvento) { this.tipoEvento = tipoEvento; }
-    public void setJugadorAfectado(Jugador jugadorAfectado) { this.jugadorAfectado = jugadorAfectado; }
-    public void setFichaAfectada(Ficha fichaAfectada) { this.fichaAfectada = fichaAfectada; }
-    public void setValorDado(int valorDado) { this.valorDado = valorDado; }
-    public void setPosicionAnterior(int posicionAnterior) { this.posicionAnterior = posicionAnterior; }
-    public void setPosicionNueva(int posicionNueva) { this.posicionNueva = posicionNueva; }
-    public void setMensaje(String mensaje) { this.mensaje = mensaje; }
-    public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
+    // Setters
+    public void setTipoEvento(TipoEvento tipoEvento) { 
+        this.tipoEvento = tipoEvento; 
+    }
+    public void setJugadorAfectado(Jugador jugadorAfectado) { 
+        this.jugadorAfectado = jugadorAfectado; 
+    }
+    public void setFichaAfectada(Ficha fichaAfectada) { 
+        this.fichaAfectada = fichaAfectada; 
+    }
+    public void setValorDado(int valorDado) { 
+        this.valorDado = valorDado; 
+    }
+    public void setPosicionAnterior(int posicionAnterior) { 
+        this.posicionAnterior = posicionAnterior; 
+    }
+    public void setPosicionNueva(int posicionNueva) { 
+        this.posicionNueva = posicionNueva; 
+    }
+    public void setMensaje(String mensaje) { 
+        this.mensaje = mensaje; 
+    }
+    public void setTimestamp(long timestamp) { 
+        this.timestamp = timestamp; 
+    }
+    public boolean isTurnoExtra() { 
+        return turnoExtra; 
+    }
+    public void setTurnoExtra(boolean turnoExtra) { 
+        this.turnoExtra = turnoExtra; 
+    }
+    public boolean isPierdeTurno() { 
+        return pierdeTurno; 
+    }
+    public void setPierdeTurno(boolean pierdeTurno) { 
+        this.pierdeTurno = pierdeTurno; 
+    }
 
-    // --- Aliases que usa tu VistaJugador ---
-    public Jugador getJugador() { return jugadorAfectado; }
-    public Ficha getFicha() { return fichaAfectada; }
-    public int getDesde() { return posicionAnterior; }
-    public int getHasta() { return posicionNueva; }
+    // Aliases que usa tu VistaJugador 
+    public Jugador getJugador() { 
+        return jugadorAfectado; 
+    }
+    public Ficha getFicha() { 
+        return fichaAfectada; 
+    }
+    public int getDesde() { 
+        return posicionAnterior; 
+    }
+    public int getHasta() { 
+        return posicionNueva; 
+    }
 }
