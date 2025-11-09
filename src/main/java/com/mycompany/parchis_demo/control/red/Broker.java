@@ -2,30 +2,41 @@ package com.mycompany.parchis_demo.control.red;
 
 import com.google.gson.Gson;
 import com.mycompany.parchis_demo.modelo.EventoPartida;
+import com.mycompany.parchis_demo.modelo.Jugador;
+import com.mycompany.parchis_demo.modelo.enums.Color;
 import com.mycompany.parchis_demo.modelo.enums.TipoEvento;
-import java.io.*;
+
+import java.io.IOException;
+import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Broker (servidor) que recibe mensajes JSON desde los clientes (ProxyCliente)
- * a través de sockets TCP, interpreta su tipo de evento mediante el método
- * {@link #procesarEvento(EventoPartida, PrintWriter)} y los redistribuye a
- * los jugadores conectados según corresponda.
+ * y redistribuye eventos. Gestiona registro previo (nombre + color único),
+ * autodiscovery UDP, y ciclo de vida de la partida.
  */
 public class Broker {
 
     private ServerSocket servidor;
     private final List<ClienteInfo> clientes = new ArrayList<>();
+    private final Map<Integer, PrintWriter> salidasPorId = new ConcurrentHashMap<>();
+    private final Map<Integer, Jugador> jugadoresRegistrados = new ConcurrentHashMap<>();
+    private final Set<Color> coloresDisponibles = EnumSet.of(Color.ROJO, Color.AZUL, Color.VERDE, Color.AMARILLO);
+
     private final Gson gson = new Gson();
-    private int contadorJugadores = 0;
+
+    private int contadorJugadores = 0;     // ID incremental asignado al conectar
     private boolean partidaIniciada = false;
-    private int jugadorActualId = 1;
+    private int jugadorActualId = 1;       // índice "lógico" de turno (1..N)
+
+    private final int puertoTcp = 5000;
+    private final int puertoDiscovery = 5001;
 
     /**
-     * Clase interna para almacenar información del cliente
+     * Información básica de un cliente conectado.
      */
     private static class ClienteInfo {
         PrintWriter out;
@@ -37,9 +48,10 @@ public class Broker {
         }
     }
 
-    /**
-     * Inicia el broker en el puerto especificado y escucha nuevas conexiones
-     */
+    // ============================================================
+    // =================== ARRANQUE DEL BROKER ====================
+    // ============================================================
+
     public void iniciarServidor(int puerto) {
         try {
             servidor = new ServerSocket(puerto);
@@ -48,42 +60,40 @@ public class Broker {
             System.out.println("   Esperando jugadores...");
             System.out.println("___________________________________________");
 
+            // Autodescubrimiento UDP (una sola vez)
+            Thread disc = new Thread(new DiscoveryResponder(puertoTcp, puertoDiscovery), "discovery-responder");
+            disc.setDaemon(true);
+            disc.start();
+
             while (true) {
                 Socket socket = servidor.accept();
-                contadorJugadores++;
-                
-                System.out.println("\n[Broker] Jugador " + contadorJugadores + " conectado desde: " + socket.getInetAddress());
+                int id = ++contadorJugadores;
+
+                System.out.println("\n[Broker] Jugador " + id + " conectado desde: " + socket.getInetAddress());
 
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-                ClienteInfo clienteInfo = new ClienteInfo(out, contadorJugadores);
+                ClienteInfo clienteInfo = new ClienteInfo(out, id);
                 clientes.add(clienteInfo);
+                salidasPorId.put(id, out);
 
-                // Enviar ID asignado al cliente
-                EventoPartida eventoId = new EventoPartida(
-                    TipoEvento.JUGADOR_CONECTADO,
-                    null,
-                    "Tu ID es: " + contadorJugadores
-                );
-                out.println(gson.toJson(eventoId));
+                // 1) Enviar ID al nuevo cliente
+                out.println(gson.toJson(new EventoPartida(
+                        TipoEvento.JUGADOR_CONECTADO, null, "Tu ID es: " + id)));
 
-                // Notificar a todos los demás jugadores
-                EventoPartida eventoConexion = new EventoPartida(
-                    TipoEvento.JUGADOR_CONECTADO,
-                    null,
-                    "Jugador " + contadorJugadores + " se ha conectado. Total: " + clientes.size()
-                );
-                enviarEventoATodos(eventoConexion, out);
+                // 2) Enviar al nuevo la lista de colores disponibles
+                out.println(gson.toJson(new EventoPartida(
+                        TipoEvento.COLORES_DISPONIBLES, null, "Disponibles: " + coloresDisponibles)));
+
+                // 3) Notificar al resto que se conectó alguien
+                enviarEventoATodos(new EventoPartida(
+                        TipoEvento.JUGADOR_CONECTADO, null,
+                        "Jugador " + id + " se ha conectado. Total: " + clientes.size()), out);
 
                 System.out.println("[Broker] Total de jugadores conectados: " + clientes.size());
 
-                // Crea y lanza un hilo por cliente
+                // Hilo por cliente para escuchar sus mensajes
                 Thread hilo = new Thread(new HiloClienteServidor(socket, this, out));
                 hilo.start();
-
-                // Si hay 2 o más jugadores y no ha iniciado, iniciar partida
-                if (clientes.size() >= 2 && !partidaIniciada) {
-                    iniciarPartida();
-                }
             }
 
         } catch (IOException e) {
@@ -91,88 +101,155 @@ public class Broker {
         }
     }
 
-    /**
-     * Inicia la partida cuando hay suficientes jugadores
-     */
+    // ============================================================
+    // ==================== LÓGICA DE PARTIDA =====================
+    // ============================================================
+
     private synchronized void iniciarPartida() {
-        partidaIniciada = true;
-        System.out.println("\n[Broker] | PARTIDA INICIADA con " + clientes.size() + " jugadores. |");
-        
-        EventoPartida eventoInicio = new EventoPartida(
-            TipoEvento.PARTIDA_INICIADA,
-            null,
-            "La partida ha comenzado con " + clientes.size() + " jugadores."
-        );
-        enviarEventoATodos(eventoInicio, null);
-
-        // Dar turno al primer jugador
-        EventoPartida primerTurno = new EventoPartida(
-            TipoEvento.TURNO_CAMBIADO,
-            null,
-            "Turno del jugador 1"
-        );
-        enviarEventoATodos(primerTurno, null);
-        System.out.println("[Broker] Turno inicial asignado al Jugador 1");
-    }
-
-    /**
-     * DISPATCHER que procesa eventos y gestiona los cambios de turno.
-     */
-    public synchronized void procesarEvento(EventoPartida evento, PrintWriter emisor) {
-        if (evento == null) {
-            System.out.println("[Broker] Error: evento nulo recibido.");
+        if (partidaIniciada) return;
+        // Asegurar que haya al menos 2 JUGADORES REGISTRADOS (no solo conectados)
+        if (jugadoresRegistrados.size() < 2) {
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.MOVIMIENTO_IMPOSIBLE, null,
+                    "No se puede iniciar: se requieren al menos 2 jugadores registrados"), null);
             return;
         }
 
+        partidaIniciada = true;
+        System.out.println("\n[Broker] | PARTIDA INICIADA con " + clientes.size() + " jugadores. |");
+
+        enviarEventoATodos(new EventoPartida(
+                TipoEvento.PARTIDA_INICIADA, null,
+                "La partida ha comenzado con " + clientes.size() + " jugadores."), null);
+
+        // Turno del jugador 1 (por simplicidad mantenemos 1..N)
+        jugadorActualId = 1;
+        enviarEventoATodos(new EventoPartida(
+                TipoEvento.TURNO_CAMBIADO, null,
+                "Turno del jugador " + jugadorActualId), null);
+        System.out.println("[Broker] Turno inicial asignado al Jugador " + jugadorActualId);
+    }
+
+    public synchronized void procesarEvento(EventoPartida evento, PrintWriter emisor) {
+        if (evento == null) return;
+
         System.out.println("[Broker] Evento recibido: " + evento.getTipoEvento() + " - " + evento.getMensaje());
 
-        // Reenviar a todos (incluyendo al emisor para que vea confirmación)
+        // === Solicitud de inicio ===
+        if (evento.getTipoEvento() == TipoEvento.SOLICITAR_INICIO) {
+            if (!partidaIniciada) {
+                iniciarPartida();
+            }
+            return; // no redistribuir
+        }
+
+        // === Registro de jugador: nombre + color ===
+        if (evento.getTipoEvento() == TipoEvento.SOLICITAR_REGISTRO) {
+            Jugador req = evento.getJugador(); // el cliente envía su Jugador con id + nombre + color
+            if (req == null) return;
+
+            // validar color disponible
+            if (!coloresDisponibles.contains(req.getColor())) {
+                PrintWriter outCli = salidasPorId.get(req.getId());
+                if (outCli != null) {
+                    outCli.println(gson.toJson(new EventoPartida(
+                            TipoEvento.REGISTRO_RECHAZADO, null,
+                            "Color no disponible: " + req.getColor())));
+                    outCli.println(gson.toJson(new EventoPartida(
+                            TipoEvento.COLORES_DISPONIBLES, null,
+                            "Disponibles: " + coloresDisponibles)));
+                }
+                return;
+            }
+
+            // Aceptar: reservar color y guardar perfil
+            coloresDisponibles.remove(req.getColor());
+            jugadoresRegistrados.put(req.getId(), req);
+
+            // 1) Confirmacion directa
+            PrintWriter outCli = salidasPorId.get(req.getId());
+            if (outCli != null) {
+                outCli.println(gson.toJson(new EventoPartida(
+                        TipoEvento.REGISTRO_ACEPTADO, req,
+                        "Registro aceptado: " + req.getNombre() + " (" + req.getColor() + ")")));
+            }
+
+            // 2) Difundir perfil actualizado a todos
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.JUGADOR_ACTUALIZADO, req,
+                    req.getNombre() + " eligió color " + req.getColor()), null);
+
+            // 3) Difundir lista viva de colores
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.COLORES_DISPONIBLES, null,
+                    "Disponibles: " + coloresDisponibles), null);
+
+            return;
+        }
+
+        // Broadcast normal 
         enviarEventoATodos(evento, null);
 
-        // Cambio de turno solo si fue un movimiento de ficha
-        if (evento.getTipoEvento() == TipoEvento.FICHA_MOVIDA) {
-            // Calcular siguiente jugador
-            jugadorActualId = (jugadorActualId % clientes.size()) + 1;
-
-            EventoPartida cambioTurno = new EventoPartida(
-                TipoEvento.TURNO_CAMBIADO,
-                null,
-                "Turno del jugador " + jugadorActualId
-            );
-
-            enviarEventoATodos(cambioTurno, null);
-            System.out.println("[Broker] Turno cambiado -> Jugador " + jugadorActualId);
+        // Cambio de turno simple tras movimiento 
+        if (evento.getTipoEvento() == TipoEvento.FICHA_MOVIDA && partidaIniciada) {
+            if (!clientes.isEmpty()) {
+                jugadorActualId = (jugadorActualId % clientes.size()) + 1;
+                enviarEventoATodos(new EventoPartida(
+                        TipoEvento.TURNO_CAMBIADO, null,
+                        "Turno del jugador " + jugadorActualId), null);
+                System.out.println("[Broker] Turno cambiado -> Jugador " + jugadorActualId);
+            }
         }
     }
 
-    /**
-     * Elimina un cliente desconectado de la lista de conexiones activas.
-     */
     public synchronized void eliminarCliente(PrintWriter out) {
         ClienteInfo clienteRemovido = null;
-        for (ClienteInfo cliente : clientes) {
-            if (cliente.out == out) {
-                clienteRemovido = cliente;
+        for (ClienteInfo c : clientes) {
+            if (c.out == out) {
+                clienteRemovido = c;
                 break;
             }
         }
-        
+
         if (clienteRemovido != null) {
             clientes.remove(clienteRemovido);
-            System.out.println("[Broker] Jugador " + clienteRemovido.jugadorId + " desconectado. Quedan: " + clientes.size());
-            
-            EventoPartida eventoDesconexion = new EventoPartida(
-                TipoEvento.JUGADOR_DESCONECTADO,
-                null,
-                "Jugador " + clienteRemovido.jugadorId + " se ha desconectado"
-            );
-            enviarEventoATodos(eventoDesconexion, null);
+            salidasPorId.remove(clienteRemovido.jugadorId);
+
+            // Si estaba registrado, liberar color
+            Jugador reg = jugadoresRegistrados.remove(clienteRemovido.jugadorId);
+            if (reg != null && reg.getColor() != null) {
+                coloresDisponibles.add(reg.getColor());
+                enviarEventoATodos(new EventoPartida(
+                        TipoEvento.COLORES_DISPONIBLES, null,
+                        "Disponibles: " + coloresDisponibles), null);
+            }
+
+            System.out.println("[Broker] Jugador " + clienteRemovido.jugadorId +
+                    " desconectado. Quedan: " + clientes.size());
+
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.JUGADOR_DESCONECTADO, null,
+                    "Jugador " + clienteRemovido.jugadorId + " se ha desconectado"), null);
+        }
+
+        // Finalizar partida si quedan < 2 jugadores
+        if (clientes.isEmpty()) {
+            partidaIniciada = false;
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.PARTIDA_TERMINADA, null,
+                    "Partida finalizada: no hay jugadores"), null);
+        } else if (partidaIniciada && clientes.size() < 2) {
+            partidaIniciada = false;
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.PARTIDA_TERMINADA, null,
+                    "Partida finalizada: menos de 2 jugadores"), null);
+        } else {
+            if (jugadorActualId > clientes.size()) jugadorActualId = 1;
         }
     }
 
-    /**
-     * Envía un evento a todos los clientes conectados excepto al emisor.
-     */
+    
+    /** Envía un evento a todos los clientes, excepto al emisor si se pasa. */
     public synchronized void enviarEventoATodos(EventoPartida evento, PrintWriter emisor) {
         String json = gson.toJson(evento);
         for (ClienteInfo cliente : clientes) {
@@ -182,6 +259,7 @@ public class Broker {
         }
     }
 
+    
     public static void main(String[] args) {
         Broker servidor = new Broker();
         servidor.iniciarServidor(5000);

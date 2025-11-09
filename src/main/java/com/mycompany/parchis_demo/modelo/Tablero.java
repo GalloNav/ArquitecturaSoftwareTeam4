@@ -153,7 +153,7 @@ public class Tablero {
     // Seguras, barreras y capturas
     // ========================================================================
 
-    /** ¿La casilla es segura (global o asociada a algún color)? */
+    /** ¿La casilla es segura (global o asociada a algun color)? */
     public boolean esSegura(int pos) {
         if (segurasGlobales.contains(pos)) return true;
         for (var kv : zonasSeguras.entrySet()) {
