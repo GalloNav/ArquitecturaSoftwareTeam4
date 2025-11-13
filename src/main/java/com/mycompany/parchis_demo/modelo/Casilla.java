@@ -43,8 +43,7 @@ public class Casilla {
         // segura global
         if (tipo == TipoCasilla.SEGURA) return true;
         // salida del propio color (opcional)
-        if (tipo == TipoCasilla.SALIDA && colorAsociado == color) return true;
-        return false;
+        return (tipo == TipoCasilla.SALIDA && colorAsociado == color);
     }
 
     public List<Ficha> getFichas() {
@@ -69,6 +68,6 @@ public class Casilla {
     }
 
     void setTipo(TipoCasilla tipoCasilla) {
-        this.tipo = tipo;
+        this.tipo = tipoCasilla;
     }
 }

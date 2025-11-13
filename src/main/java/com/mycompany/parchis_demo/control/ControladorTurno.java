@@ -23,6 +23,42 @@ public class ControladorTurno {
         this.partida = partida;
         this.proxy = proxy;
     }
+    
+    public int tirarDado() {
+        return partida.getDado().lanzar();
+    }
+    
+    public ResultadoTurno procesarTurnoConValor(Jugador jugador, int idFicha, int valorDado) {
+        Ficha ficha = jugador.seleccionarFicha(idFicha);
+        if (ficha == null) return new ResultadoTurno(false, "Ficha no encontrada", false, false, valorDado);
+
+        // Validar: desde base solo con 5
+        if (ficha.estaEnBase() && valorDado != 5) {
+            return new ResultadoTurno(false, "Para salir de base necesitas un 5", false, false, valorDado);
+        }
+
+        int desde = ficha.getPosicion();
+        int hasta = partida.getTablero().calcularNuevaPosicion(ficha, valorDado);
+        if (hasta == Ficha.POS_BASE) {
+            return new ResultadoTurno(false, "Movimiento inválido", false, false, valorDado);
+        }
+
+        ficha.setPosicion(hasta);
+        boolean huboCaptura = verificarCaptura(ficha, hasta);
+
+        // Reglas del 6 simples (si ya las tenías, reutilízalas)
+        boolean turnoExtra = (valorDado == 6);
+
+        EventoPartida ev = new EventoPartida(
+            TipoEvento.FICHA_MOVIDA, jugador, ficha, valorDado, desde, hasta,
+            jugador.getNombre()+" (J"+jugador.getId()+") lanzo "+valorDado+" y movio su ficha de "+desde+" a "+hasta
+        );
+        if (proxy != null) proxy.enviarEvento(ev);
+        partida.notificarObservadores(ev);
+
+        return new ResultadoTurno(true, "Ficha movida", turnoExtra, huboCaptura, valorDado);
+    }
+
 
     /**
      * Procesa el turno del jugador sobre la ficha indicada.

@@ -1,7 +1,4 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
- */
+
 package com.mycompany.parchis_demo.modelo;
 
 import com.mycompany.parchis_demo.modelo.enums.Color;
@@ -17,11 +14,14 @@ public class Ficha {
     private boolean enPasillo;
     private boolean enMeta;
     private int indicePasillo;
+    
+    public static final int POS_BASE = -1;   // base real
+    public static final int POS_META = 68;   // meta
 
     public Ficha(int id, Color color) {
         this.id = id;
         this.color = color;
-        this.posicion = 0;
+        this.posicion = POS_BASE;
     }
 
     public void mover(int casillas) {
@@ -31,9 +31,9 @@ public class Ficha {
         }
     }
     
-     /** ¿La ficha está en base (aún no ha salido)? */
+     /** ¿La ficha esta en base (aun no ha salido)? */
     public boolean estaEnBase() {
-        return posicion < 0 && !enPasillo && !enMeta;
+        return posicion == POS_BASE;
     }
 
     /** ¿Está recorriendo el anillo principal (68 casillas)? */
@@ -48,7 +48,7 @@ public class Ficha {
 
     /** ¿Llegó a la meta final? */
     public boolean estaEnMeta() {
-        return enMeta;
+        return posicion >= POS_META;
     }
     
     /** Marca que la ficha entró a su pasillo (índice 0). */
@@ -68,7 +68,7 @@ public class Ficha {
     }
 
     public void volverACasa() {
-        this.posicion = -1;
+        this.posicion = POS_BASE;
         this.enPasillo = false;
         this.enMeta = false;
         this.indicePasillo = -1;

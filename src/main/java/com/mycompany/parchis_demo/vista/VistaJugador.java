@@ -206,15 +206,17 @@ public class VistaJugador {
                 String cmd = scanner.nextLine();
 
                 if (cmd.isEmpty()) {
-                    int idFicha = leerIdFicha();
-                    ResultadoTurno res = controlador.procesarTurno(jugador, idFicha);
+                    // 1) Tirar dado
+                    int valor = controlador.tirarDado();
+                    System.out.println("[" + jugador.getNombre() + "] lanzó: " + valor);
 
-                    if (res.getValorDado() != null)
-                        System.out.println("[" + jugador.getNombre() + "] lanzó: " + res.getValorDado());
+                    // 2) Elegir ficha DESPUES de ver el valor
+                    int idFicha = leerIdFicha(); // 0..3
+                    ResultadoTurno res = controlador.procesarTurnoConValor(jugador, idFicha, valor);
 
                     if (!res.exito()) {
                         System.out.println("[Movimiento inválido] " + res.mensaje());
-                        esMiTurno = true; // reintentar
+                        esMiTurno = true; // reintenta
                     } else {
                         esMiTurno = res.turnoExtra();
                         if (!esMiTurno) System.out.println("\nEsperando a los demás jugadores...\n");
