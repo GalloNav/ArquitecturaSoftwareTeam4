@@ -319,9 +319,12 @@ public class VistaJugador {
             return e;
         });
     }
-
+    //Mensaje nuevo
+    
     private void imprimirEstadoGlobal() {
-        System.out.println("\n----- Estado de la partida -----");
+        System.out.println("\n-----"
+                + ""
+                + " Estado de la partida -----");
         if (estadoGlobal.isEmpty()) {
             System.out.println("(sin datos aún)");
         } else {
