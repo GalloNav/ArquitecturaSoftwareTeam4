@@ -184,14 +184,14 @@ public class Broker {
 
         // === Registro de jugador: nombre + color ===
         if (evento.getTipoEvento() == TipoEvento.SOLICITAR_REGISTRO) {
-            Jugador req = evento.getJugador(); // el cliente envía su Jugador con id + nombre + color
+            Jugador req = evento.getJugador();
             if (req == null) return;
 
             // validar color disponible
-            if (!coloresDisponibles.contains(req.getColor())) {
+            if (! coloresDisponibles.contains(req.getColor())) {
                 PrintWriter outCli = salidasPorId.get(req.getId());
                 if (outCli != null) {
-                    outCli.println(gson.toJson(new EventoPartida(
+                    outCli. println(gson.toJson(new EventoPartida(
                             TipoEvento.REGISTRO_RECHAZADO, null,
                             "Color no disponible: " + req.getColor())));
                     outCli.println(gson.toJson(new EventoPartida(
@@ -201,26 +201,29 @@ public class Broker {
                 return;
             }
 
-            // Aceptar: reservar color y guardar perfil
+            //  NUEVO: Crear jugador CON fichas inicializadas 
+            Jugador jugadorCompleto = new Jugador(req.getId(), req.getNombre(), "", req.getColor());
+            // El constructor de Jugador ya crea las 4 fichas en base automáticamente
+
             coloresDisponibles.remove(req.getColor());
-            jugadoresRegistrados.put(req.getId(), req);
+            jugadoresRegistrados.put(jugadorCompleto.getId(), jugadorCompleto); // ⬅️ Ahora SÍ tiene fichas
 
             // 1) Confirmación directa al cliente
-            PrintWriter outCli = salidasPorId.get(req.getId());
+            PrintWriter outCli = salidasPorId. get(req.getId());
             if (outCli != null) {
                 outCli.println(gson.toJson(new EventoPartida(
-                        TipoEvento.REGISTRO_ACEPTADO, req,
-                        "Registro aceptado: " + req.getNombre() + " (" + req.getColor() + ")")));
+                        TipoEvento.REGISTRO_ACEPTADO, jugadorCompleto,  // ⬅️ Enviar el jugador completo
+                        "Registro aceptado: " + jugadorCompleto.getNombre() + " (" + jugadorCompleto.getColor() + ")")));
             }
 
             // 2) Difundir perfil actualizado a todos
             enviarEventoATodos(new EventoPartida(
-                    TipoEvento.JUGADOR_ACTUALIZADO, req,
-                    req.getNombre() + " eligió color " + req.getColor()), null);
+                    TipoEvento. JUGADOR_ACTUALIZADO, jugadorCompleto,  // ⬅️ Aquí también
+                    jugadorCompleto.getNombre() + " eligió color " + jugadorCompleto.getColor()), null);
 
             // 3) Difundir lista viva de colores
             enviarEventoATodos(new EventoPartida(
-                    TipoEvento.COLORES_DISPONIBLES, null,
+                    TipoEvento. COLORES_DISPONIBLES, null,
                     "Disponibles: " + coloresDisponibles), null);
 
             return;
