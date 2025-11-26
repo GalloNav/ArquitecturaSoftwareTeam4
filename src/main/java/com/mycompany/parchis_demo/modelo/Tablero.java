@@ -47,33 +47,34 @@ public class Tablero {
 
     /** Ajusta estas posiciones a tu plantilla real del tablero si difiere. */
     public void configurarPosicionesEspeciales() {
-        // Salidas
+        // SALIDAS DE CADA COLOR
         posicionesInicio.put(Color.ROJO, 0);
         posicionesInicio.put(Color.AZUL, 17);
-        posicionesInicio.put(Color.VERDE, 34);
-        posicionesInicio.put(Color.AMARILLO, 51);
+        posicionesInicio.put(Color.AMARILLO, 34);
+        posicionesInicio.put(Color.VERDE, 51);
 
-        // Entradas a pasillo (una antes de la salida del color siguiente en el anillo)
-        entradaPasillo.put(Color.ROJO, 67);
-        entradaPasillo.put(Color.AZUL, 16);
-        entradaPasillo.put(Color.VERDE, 33);
-        entradaPasillo.put(Color.AMARILLO, 50);
+        // ENTRADAS A PASILLO DE CADA COLOR 
+        //(La segunda vez que el jugador pase por esa posicion, entra automaticamente al pasillo)
+        entradaPasillo.put(Color.ROJO, 4);
+        entradaPasillo.put(Color.AZUL, 21);
+        entradaPasillo.put(Color.AMARILLO, 38);
+        entradaPasillo.put(Color.VERDE, 55);
 
-        // Seguras globales (estrellas/refugios)
+        // SEGURAS (Las mismas que las salidas)
         segurasGlobales.clear();
-        segurasGlobales.addAll(Arrays.asList(5, 12, 22, 29, 39, 46, 56, 63));
+        segurasGlobales.addAll(Arrays.asList(0,17,34,51));
 
-        // Seguras por color (si tu variante las usa)
-        zonasSeguras.put(Color.ROJO, Arrays.asList(5, 12));
-        zonasSeguras.put(Color.AZUL, Arrays.asList(22, 29));
-        zonasSeguras.put(Color.VERDE, Arrays.asList(39, 46));
-        zonasSeguras.put(Color.AMARILLO, Arrays.asList(56, 63));
+        // SEGURAS POR COLOR
+        zonasSeguras.put(Color.ROJO, Arrays.asList(0));
+        zonasSeguras.put(Color.AZUL, Arrays.asList(17));
+        zonasSeguras.put(Color.AMARILLO, Arrays.asList(34));
+        zonasSeguras.put(Color.VERDE, Arrays.asList(51));
 
         // (Opcional) marca tipos en casillas
-        casillas.get(posicionesInicio.get(Color.ROJO)).setTipo(TipoCasilla.SALIDA);
-        casillas.get(posicionesInicio.get(Color.AZUL)).setTipo(TipoCasilla.SALIDA);
-        casillas.get(posicionesInicio.get(Color.VERDE)).setTipo(TipoCasilla.SALIDA);
-        casillas.get(posicionesInicio.get(Color.AMARILLO)).setTipo(TipoCasilla.SALIDA);
+        casillas.get(0).setTipo(TipoCasilla.SALIDA);
+        casillas.get(17).setTipo(TipoCasilla.SALIDA);
+        casillas.get(34). setTipo(TipoCasilla.SALIDA);
+        casillas.get(51).setTipo(TipoCasilla.SALIDA);
 
         for (int s : segurasGlobales) {
             casillas.get(s).setTipo(TipoCasilla.SEGURA);

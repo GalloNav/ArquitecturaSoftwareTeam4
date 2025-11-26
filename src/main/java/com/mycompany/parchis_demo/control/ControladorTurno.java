@@ -36,6 +36,15 @@ public class ControladorTurno {
     public int tirarDado() {
         return partida.getDado().lanzar();
     }
+    
+    /**
+    * Método para compatibilidad con Broker (cuando el broker lanza el dado). 
+    * Lanza el dado internamente y delega a procesarTurnoConValor. 
+    */
+   public ResultadoTurno procesarTurno(Jugador jugador, int idFicha) {
+       int valorDado = tirarDado();  // Lanza el dado aquí
+       return procesarTurnoConValor(jugador, idFicha, valorDado);
+   }
 
     // ======================================================
     // 2) Procesar turno usando el valor YA lanzado

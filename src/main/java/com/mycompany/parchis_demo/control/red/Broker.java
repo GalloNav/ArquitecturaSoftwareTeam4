@@ -1,8 +1,12 @@
 package com.mycompany.parchis_demo.control.red;
 
 import com.google.gson.Gson;
+import com.mycompany.parchis_demo.control.ControladorTurno;
 import com.mycompany.parchis_demo.modelo.EventoPartida;
+import com.mycompany.parchis_demo.modelo.Ficha;
 import com.mycompany.parchis_demo.modelo.Jugador;
+import com.mycompany.parchis_demo.modelo.Partida;
+import com.mycompany.parchis_demo.modelo.ResultadoTurno;
 import com.mycompany.parchis_demo.modelo.enums.Color;
 import com.mycompany.parchis_demo.modelo.enums.TipoEvento;
 
@@ -43,6 +47,10 @@ public class Broker {
     // Puertos por defecto para TCP y discovery UDP
     private final int puertoTcp = 5000;
     private final int puertoDiscovery = 5001;
+    
+     // ===== NUEVAS INSTANCIAS PARA LÓGICA DE JUEGO =====
+    private Partida partida;
+    private ControladorTurno controladorTurno;
 
     /** Información básica de un cliente conectado. */
     private static class ClienteInfo {
@@ -58,6 +66,15 @@ public class Broker {
     // =================== ARRANQUE DEL BROKER ====================
     // ============================================================
 
+    // Constructor: inicializa partida y controlador
+    public Broker() {
+        this.partida = new Partida("Partida-Broker");
+        
+        // ProxyCliente null porque el Broker NO envía eventos via proxy,
+        // los redistribuye directamente con enviarEventoATodos
+        this.controladorTurno = new ControladorTurno(partida, null);
+    }
+    
     public void iniciarServidor(int puerto) {
         try {
             servidor = new ServerSocket(puerto);
@@ -121,8 +138,18 @@ public class Broker {
                     "No se puede iniciar: se requieren al menos 2 jugadores registrados"), null);
             return;
         }
+        
+        // Agregar jugadores registrados a la Partida
+        for (Jugador j : jugadoresRegistrados.values()) {
+            if (! partida.getJugadores(). contains(j)) {
+                partida.agregarJugador(j);
+            }
+        }
+        partida.iniciarPartida();
+        
 
         partidaIniciada = true;
+       
         System.out.println("\n[Broker] | PARTIDA INICIADA con " + clientes.size() + " jugadores. |");
 
         enviarEventoATodos(new EventoPartida(
@@ -198,7 +225,86 @@ public class Broker {
 
             return;
         }
+        
+        // === SOLICITAR_TURNO: servidor lanza dado y procesa movimiento ===
+        if (evento. getTipoEvento() == TipoEvento.SOLICITAR_TURNO) {
+            if (! partidaIniciada) {
+                System.out.println("[Broker] SOLICITAR_TURNO recibido pero partida no iniciada");
+                return;
+            }
 
+            Jugador solicitante = evento.getJugador();
+            if (solicitante == null || solicitante.getId() != jugadorActualId) {
+                System.out. println("[Broker] SOLICITAR_TURNO de jugador " + 
+                                   (solicitante != null ? solicitante.getId() : "null") + 
+                                   " pero no es su turno (actual: " + jugadorActualId + ")");
+                return;
+            }
+
+            // Buscar jugador completo registrado
+            Jugador jugadorEnPartida = jugadoresRegistrados.get(solicitante. getId());
+            if (jugadorEnPartida == null) {
+                System.out.println("[Broker] Jugador no encontrado: " + solicitante.getId());
+                return;
+            }
+
+            // Extraer ficha del evento
+            Ficha fichaEvento = evento.getFicha();
+            if (fichaEvento == null) {
+                System.out.println("[Broker] SOLICITAR_TURNO sin ficha");
+                return;
+            }
+
+            int idFicha = fichaEvento.getId();
+            System.out.println("[Broker] Procesando turno de J" + jugadorEnPartida. getId() + 
+                               " para mover ficha " + idFicha);
+
+            // Procesar turno (lanza dado, valida, mueve)
+            ResultadoTurno resultado = controladorTurno.procesarTurno(jugadorEnPartida, idFicha);
+
+            if (! resultado.isExito()) {
+                // Movimiento inválido
+                PrintWriter outCli = salidasPorId.get(jugadorEnPartida.getId());
+                if (outCli != null) {
+                    outCli.println(gson.toJson(new EventoPartida(
+                            TipoEvento.MOVIMIENTO_IMPOSIBLE, jugadorEnPartida,
+                            resultado.getMensaje())));
+                }
+                return;
+            }
+
+            // Construir evento FICHA_MOVIDA
+            Ficha fichaMovida = jugadorEnPartida.seleccionarFicha(idFicha);
+            EventoPartida eventoMovimiento = new EventoPartida(
+                    TipoEvento. FICHA_MOVIDA,
+                    jugadorEnPartida,
+                    fichaMovida,
+                    resultado.getValorDado() != null ? resultado.getValorDado() : 0,
+                    0,
+                    fichaMovida != null ? fichaMovida.getPosicion() : 0,
+                    jugadorEnPartida.getNombre() + " lanzó " + resultado.getValorDado() + 
+                    " y movió ficha " + idFicha
+            );
+            eventoMovimiento.setTurnoExtra(resultado.isTurnoExtra());
+            eventoMovimiento.setPierdeTurno(false);
+
+            // Redistribuir a todos
+            enviarEventoATodos(eventoMovimiento, null);
+
+            // Cambio de turno
+            boolean repetir = resultado.isTurnoExtra();
+            if (! repetir) {
+                jugadorActualId = (jugadorActualId % jugadoresRegistrados.size()) + 1;
+            }
+
+            enviarEventoATodos(new EventoPartida(
+                    TipoEvento.TURNO_CAMBIADO, null,
+                    "Turno del jugador " + jugadorActualId), null);
+
+            System.out.println("[Broker] Turno procesado.  Siguiente: Jugador " + jugadorActualId);
+            return;
+        }
+        
         // === Broadcast normal de cualquier otro evento ===
         enviarEventoATodos(evento, null);
 
